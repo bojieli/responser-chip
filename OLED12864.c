@@ -260,24 +260,32 @@ void write_IIC_data(uchar data)
 	write_IIC_byte(data);
 	IIC_stop();
 }
+
 void LY096BG30_init(void)
 {
-
-	write_IIC_command(0xae);                        //display off
-	write_IIC_command(0xd5);write_IIC_command(0x80);//set display clock divide ratio/oscillator frequency
-	write_IIC_command(0xa8);write_IIC_command(0x3f);//set multiplex ratio
-	write_IIC_command(0xd3);write_IIC_command(0x00);//set display offset
-	write_IIC_command(0x40);						//set display start line
-	write_IIC_command(0x8d);write_IIC_command(0x14);//set charge pump
-	write_IIC_command(0xd8);write_IIC_command(0x05);//set low power diaplay mode
-	write_IIC_command(0xa1);						//set segment re-map
-	write_IIC_command(0xc8);						//set COM output scan direction
-	write_IIC_command(0xda);write_IIC_command(0x12);//set COM pins hardware configuration
-	write_IIC_command(0x81);write_IIC_command(0xcf);//设置对比度
-	write_IIC_command(0xd9);write_IIC_command(0xf1);//set pre-charge period
-	write_IIC_command(0xdb);write_IIC_command(0x40);//set VCOMH deselect level
-	write_IIC_command(0xa4);						//set entire display on/off
-	write_IIC_command(0xa6);						//set normal/inverse display
+	const uchar commands[] = {
+		0xae,       //display off
+		0xd5,0x80,	//set display clock divide ratio/oscillator frequency
+		0xa8,0x3f,	//set multiplex ratio
+		0xd3,0x00,	//set display offset
+		0x40,	  	//set display start line
+		0x8d,0x14,	//set charge pump
+		0xd8,0x05,	//set low power diaplay mode
+		0xa1,	  	//set segment re-map
+		0xc8,	  	//set COM output scan direction
+		0xda,0x12,	//set COM pins hardware configuration
+		0x81,0xcf,	//设置对比度
+		0xd9,0xf1,	//set pre-charge period
+		0xdb,0x40,	//set VCOMH deselect level
+		0xa4,		//set entire display on/off
+		0xa6,		//set normal/inverse display
+		0x00		//end
+	};
+	uchar *curr = commands;
+	while (*curr != 0x00) {
+		write_IIC_command(*curr);
+		++curr;
+	}
 }
 void display_clear(void)
 {
@@ -293,7 +301,8 @@ void display_clear(void)
 		}
     }
 }
-void display_char(uchar x,uchar y,uchar c)//x:0~127 y:0~6 c:0~15
+
+void generic_display_char(uchar x, uchar y, uchar c, int num, const char** tab)
 {
 	uchar i;
 	write_IIC_command(0xb0+y);
@@ -301,53 +310,30 @@ void display_char(uchar x,uchar y,uchar c)//x:0~127 y:0~6 c:0~15
 	write_IIC_command(0x10+(x>>4));
 	for(i=0;i<8;i++)
 	{
-		write_IIC_data(pgm_read_byte(&tab_16_8[c][i<<1]));
+		write_IIC_data(pgm_read_byte(&tab[c][i<<1]));
 	}
 	write_IIC_command(0xb1+y);
 	write_IIC_command(x&0x0f);
 	write_IIC_command(0x10+(x>>4));
 	for(i=0;i<8;i++)
 	{
-		write_IIC_data(pgm_read_byte(&tab_16_8[c][(i<<1)+1]));
+		write_IIC_data(pgm_read_byte(&tab[c][(i<<1)+1]));
 	}
 }
-void display_chinese_char(uchar x,uchar y,uchar c)//x:0~127 y:0~6 c:0~15
+
+inline void display_char(uchar x,uchar y,uchar c)//x:0~127 y:0~6 c:0~15
 {
-	uchar i;
-	write_IIC_command(0xb0+y);
-	write_IIC_command(x&0x0f);
-	write_IIC_command(0x10+(x>>4));
-	for(i=0;i<16;i++)
-	{
-		write_IIC_data(pgm_read_byte(&tab_16_16[c][i<<1]));
-	}
-	write_IIC_command(0xb1+y);
-	write_IIC_command(x&0x0f);
-	write_IIC_command(0x10+(x>>4));
-	for(i=0;i<16;i++)
-	{
-		write_IIC_data(pgm_read_byte(&tab_16_16[c][(i<<1)+1]));
-	}
+	generic_display_char(x,y,c,8,tab_16_8);
+}
+inline void display_chinese_char(uchar x,uchar y,uchar c)//x:0~127 y:0~6 c:0~15
+{
+	generic_display_char(x,y,c,16,tab_16_16);
 }
 void display_power(uchar power)
 {
-	uchar i;
-	uchar x=96;
-	write_IIC_command(0xb0);
-	write_IIC_command(x&0x0f);
-	write_IIC_command(0x10+(x>>4));
-	for(i=0;i<32;i++)
-	{
-		write_IIC_data(pgm_read_byte(&tab_power[power][i<<1]));
-	}
-	write_IIC_command(0xb1);
-	write_IIC_command(x&0x0f);
-	write_IIC_command(0x10+(x>>4));
-	for(i=0;i<32;i++)
-	{
-		write_IIC_data(pgm_read_byte(&tab_power[power][(i<<1)+1]));
-	}
+	generic_display_char(96,0,power,32,tab_power);
 }
+
 void display_sending(void)
 {
 	uchar x=64;

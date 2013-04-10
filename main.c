@@ -13,7 +13,10 @@
 volatile uchar system_time=0;
 volatile uchar system_counter=0;
 
-#define POWER_OFF {PORTC&=~(1<<PC3);display_off;}
+void POWER_OFF() {
+	PORTC&=~(1<<PC3);
+	display_off;
+}
 volatile uchar adcL,adcH;
 
 #define CHARGE_R (PIND&(1<<PD0))
@@ -69,7 +72,7 @@ ISR(INT0_vect)//数据接收中断
 			{
 				case 0xe0://切换到课前模式
 				{
-					if(mode!=MODE_BEFORE)
+					//if(mode!=MODE_BEFORE)
 					break;
 				}
 				case 0xe1://切换到答题模式
@@ -100,10 +103,11 @@ ISR(ADC_vect)
 	adcL=ADCL;
 	adcH=ADCH;
 }
-uint power_measure(void)
+inline uint power_measure(void)
 {
 	uchar i;
 	uint power=0;
+	uchar measure;
 	for(i=0;i<8;i++)
 	{
 		ADCSRA|=(1<<ADSC);//开始转换
@@ -113,26 +117,26 @@ uint power_measure(void)
 	power>>=3;
 	power+=20;
 	power_NEW=power;
-	if((!power_update_en)&&((power_NEW<(power_OLD+2))&&(power_NEW>(power_OLD-2))))
+	if (!power_update_en && power_NEW < power_OLD+2 && power_NEW > power_OLD-2) 
 	{
-		power=10;//不更新电量值
+		measure = 10;//不更新电量值
+		goto end;
 	}
-	else
+	uint powers[] = {
+				// 自动关机
+		783,	// 0格1格闪烁
+		803, 814, 818, 827, 835, 851, 866, 
+		890		// 显示满格
+	};
+	for (measure=0; measure<sizeof(powers); measure++)
 	{
-		if(power>890)power=9;//显示满格 display_power[8]
-		else if(power>866)power=8;//7
-		else if(power>851)power=7;//6
-		else if(power>835)power=6;//5
-		else if(power>827)power=5;//4
-		else if(power>818)power=4;//3
-		else if(power>814)power=3;//2
-		else if(power>803)power=2;//1
-		else if(power>783)power=1;//0格1格闪烁
-		else if(power<=783)power=0;//自动关机
+		if (power <= powers[i])
+			break;
 	}
-	if(power_update_en)power_update_en=0;
+end:
+	power_update_en=0;
 	power_OLD=power_NEW;
-	return power;
+	return measure;
 }
 /************************keyboard*************************/
 void timer0_init(void)//定时10ms
@@ -168,7 +172,7 @@ ISR(TIMER0_OVF_vect)
 		}
 		else if(sleep_counter==2400)//自动关机
 		{
-			POWER_OFF;//关机
+			POWER_OFF();//关机
 		}
 	}
 }
@@ -188,12 +192,9 @@ void INT1_init(void)
 ISR(INT1_vect)
 {
 	_delay_ms(500);
-	if(!(PIND&(1<<PD3)))
+	if(!(PIND&(1<<PD3)) && CHARGE_R)//按下关机键且不在充电状态
 	{
-		if(CHARGE_R)//按下关机键且不在充电状态
-		{
-			POWER_OFF;//关机
-		}
+		POWER_OFF();//关机
 	}
 }
 
@@ -304,12 +305,10 @@ int main(void)
 			{
 				case NO_CHARGE:
 				{
-					if((power!=0)&&(power!=10))display_power(power-1);
-					else if(power==0)
-					{
-						POWER_OFF;
-					
-					}
+					if (power == 0)
+						POWER_OFF();
+					else if (power != 10)
+						display_power(power-1);
 					break;
 				}
 				case CHARGING:
