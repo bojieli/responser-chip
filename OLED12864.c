@@ -348,28 +348,6 @@ void display_power(uchar power)
 		write_IIC_data(pgm_read_byte(&tab_power[power][(i<<1)+1]));
 	}
 }
-void display_sending(void)
-{
-	uchar x=64;
-	uchar ms=200;
-	uchar i;
-	for(i=0;i<10;i++)
-	{
-		display_char(x,6,19);
-		display_char(x+8,6,19);
-		display_char(x+16,6,19);
-		_delay_ms(ms);
-		display_char(x,6,18);
-		display_char(x+8,6,19);
-		display_char(x+16,6,19);
-		_delay_ms(ms);
-		display_char(x+8,6,18);
-		display_char(x+16,6,19);
-		_delay_ms(ms);
-		display_char(x+16,6,18);
-		_delay_ms(ms);
-	}
-}
 void display_picture(void)
 {
 	uint i,j;
