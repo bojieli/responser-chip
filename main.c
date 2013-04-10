@@ -30,7 +30,7 @@ uchar charge_state=0;
 volatile uchar key_flag=0;//按键扫描标志
 volatile uchar POWER_flag=0;//ADC测量标志
 volatile uchar dis_flag=0;//系统时钟显示标志
-volatile uchar sending_state=0;//射频发送状态
+
 
 uint power_NEW=500;
 uint power_OLD=500;
@@ -40,15 +40,16 @@ uchar stu_num[10]={0};//学号
 uchar ID[4]={0x00,0x00,0x00,0x00};//编号
 uchar station[3]={0x00,0x00,0x00};//基站 即频道 1~125
 volatile uchar mode=0xff;//模式 开机默认输入基站模式
-#define MODE_BUFORE   0
 #define MODE_ANSWER   1
-#define MODE_REGISTER 2
+#define MODE_REGIST   2
 volatile uchar xpos=0;//光标位置
 volatile uchar ypos=6;
 volatile uchar display_cursor_en=1;//光标显示允许
 volatile uchar mode_change=0;//更换模式
 volatile uint sleep_counter=0;//自动休眠计数器
 volatile uchar sleep_state=1;//休眠状态 0休眠
+volatile uchar answer_ack=0;//应答标志
+volatile uchar mode_before_reply=0;//课前模式回复标志 1 回复
 /************************nRF24L01*************************/
 volatile uchar rx_buf[9]={0};
 volatile uchar tx_buf[9]={0x00,0x00,0x00,0x00,0xff,0x00,0x00,0x00,0x00};//前4字节为ID
@@ -70,24 +71,39 @@ ISR(INT0_vect)//数据接收中断
 		{
 			switch(rx_buf[4])
 			{
-				case 0xe0://切换到课前模式
+				case 0xe0://切换到答题模式 回复
 				{
-					//if(mode!=MODE_BEFORE)
+					if(mode!=MODE_ANSWER)
+					{
+						mode_change=MODE_ANSWER;//到while（1）中切换
+					}
+					mode_before_reply=1;//回复课前点名数据
 					break;
 				}
 				case 0xe1://切换到答题模式
 				{
+					if(mode!=MODE_ANSWER)
+					{
+						mode_change=MODE_ANSWER;//到while（1）中切换
+					}
 					break;
 				}
 				case 0xe2://切换到注册模式
 				{
+					if(mode!=MODE_REGIST)
+					{
+						mode_change=MODE_REGIST;//到while（1）中切换
+					}
 					break;
 				}
 			}
 		}
 		else//确认信号
 		{
-		
+			if(1)
+			{
+				answer_ack=1;//收到确认信号
+			}
 		}
 	}
 	
@@ -214,7 +230,7 @@ void system_init(void)
 int main(void)
 {
 	uchar i=0,j=0;//显示用循环变量
-	uchar ms;
+	uchar us;
 	uchar station_num;//计算基站编号用
 
 	uchar power=5;//显示电量用
@@ -323,18 +339,18 @@ int main(void)
 			{
 				display_off;
 				display_clear();
-				if(mode_change==1)
+				if(mode_change==MODE_ANSWER)
 				{
 					display_chinese_char(0,3,3);
 					display_chinese_char(16,3,4);
-					mode=1;
+					mode=MODE_ANSWER;
 					answer_temp=0;
 				}
-				else if(mode_change==2)
+				else if(mode_change==MODE_REGIST)
 				{
 					display_chinese_char(0,3,2);
 					display_chinese_char(16,3,1);
-					mode=2;
+					mode=MODE_REGIST;
 				}
 				display_char(32,3,16);
 				display_chinese_char(0,0,5);
@@ -352,7 +368,8 @@ int main(void)
 			}
 			dis_flag=0;
 		}
-		if(mode==0)//输入基站编号模式
+/*****************************************************************************************/
+		if(mode==0xff)//输入基站编号模式
 		{
 			if(key_flag)
 			{
@@ -364,7 +381,6 @@ int main(void)
 					{
 						display_on;//唤醒
 						sleep_state=1;
-						//SetRX_Mode();
 					}
 					else
 					{
@@ -409,7 +425,7 @@ int main(void)
 								display_chinese_char(16,3,4);
 								display_char(32,3,16);
 								display_on;
-								mode=1;//进入答题模式
+								mode=MODE_ANSWER;//进入答题模式
 							}
 						}
 						else if(key_val==11)//退格	
@@ -426,7 +442,8 @@ int main(void)
 				key_flag=0;
 			}
 		}
-		else if(mode==1)//答题模式
+/*****************************************************************************************/
+		else if(mode==MODE_ANSWER)//答题模式
 		{			
 			if(key_flag)
 			{
@@ -475,49 +492,70 @@ int main(void)
 								}
 							}
 						}
-						else if(key_val==10)//确定键
+						else if((key_val==10)|mode_before_reply)//确定键
 						{
-							if(display_cursor_en)
+							if(display_cursor_en|mode_before_reply)
 							{
-								if(xpos)//有答案
+								if(xpos|mode_before_reply)//有答案
 								{
-									tx_buf[5]=answer_temp>>1;
-									for(i=0;i<10;i++)
+									tx_buf[4]=0xc0;
+									if(mode_before_reply)
 									{
-										nRF24L01_TxPacket(tx_buf);//发送答案
-										while(!sending_state);
-										if(sending_state==2)//发送成功
-										{
-										
-											break;
-										}
-										ms=100+(((uint)(TCNT0+((uint)system_time)*178))<<4);
-										for(j=0;j<ms;j++)
-										{
-											_delay_us(1);
-										}
-									}
-									send_succeed=sending_state;
-									sending_state=0;
-
-									display_chinese_char(32,6,7);//发
-									display_chinese_char(48,6,8);//送
-									if(send_succeed==2)//发送成功
-									{
-										display_chinese_char(64,6,10);//成
-										display_chinese_char(80,6,11);//功
-										display_char(112,6,19);
-										display_char(120,6,19);
+										tx_buf[5]=0x00;
 									}
 									else
 									{
-										display_chinese_char(64,6,12);//失
-										display_chinese_char(80,6,13);//败
-										display_char(112,6,19);
-										display_char(120,6,19);
+										tx_buf[5]=answer_temp>>1;
+									}																	
+									us=100+(((uint)(TCNT0+((uint)system_time)*178))<<4);
+									
+									for(i=0;i<6;i++)
+									{
+										nRF24L01_TxPacket(tx_buf);
+										for(j=0;j<us;j++)
+										{
+											_delay_us(1);
+										}
+										if(answer_ack)
+										{
+											//发送成功
+											break;
+										}
 									}
-									display_cursor_en=0;//关闭光标显示
-									display_char(48+(xpos<<3),3,19);
+									if(answer_ack)
+									{
+										answer_ack=0;
+										send_succeed=1;//发送成功
+									}
+									else
+									{
+										send_succeed=0;//发送失败
+									}
+									if(!mode_before_reply)
+									{
+										display_chinese_char(32,6,7);//发
+										display_chinese_char(48,6,8);//送
+										if(send_succeed)//发送成功
+										{
+											display_chinese_char(64,6,10);//成
+											display_chinese_char(80,6,11);//功
+											display_char(112,6,19);
+											display_char(120,6,19);
+										}
+										else
+										{
+											display_chinese_char(64,6,12);//失
+											display_chinese_char(80,6,13);//败
+											display_char(112,6,19);
+											display_char(120,6,19);
+										}
+										display_cursor_en=0;//关闭光标显示
+										display_char(48+(xpos<<3),3,19);
+									}
+									else
+									{
+										mode_before_reply=0;
+									}
 								}
 							}
 						}
@@ -526,7 +564,8 @@ int main(void)
 				key_flag=0;
 			}
 		}
-		else if(mode==2)//注册模式
+/*****************************************************************************************/
+		else if(mode==MODE_REGIST)//注册模式
 		{
 			if(key_flag)
 			{
@@ -589,20 +628,29 @@ int main(void)
 									tx_buf[6]=(stu_num[4]<<4)+stu_num[5];
 									tx_buf[7]=(stu_num[6]<<4)+stu_num[7];
 									tx_buf[8]=(stu_num[8]<<4)+stu_num[9];
-
-									for(i=0;i<10;i++)
+									us=100+(((uint)(TCNT0+((uint)system_time)*178))<<4);
+									for(i=0;i<6;i++)
 									{
-										nRF24L01_TxPacket(tx_buf);//发送学号
-										while(!sending_state);
-										if(sending_state==2)//发送成功
+										nRF24L01_TxPacket(tx_buf);
+										for(j=0;j<us;j++)
 										{
-										
+											_delay_us(1);
+										}
+										if(answer_ack)
+										{
+											//发送成功
 											break;
 										}
-										_delay_us(100);
 									}
-									send_succeed=sending_state;
-									sending_state=0;
+									if(answer_ack)
+									{
+										answer_ack=0;
+										send_succeed=1;//发送成功
+									}
+									else
+									{
+										send_succeed=0;//发送失败
+									}
 
 									display_chinese_char(32,6,7);//发
 									display_chinese_char(48,6,8);//送
