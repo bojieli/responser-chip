@@ -19,7 +19,7 @@
 #define SCL_I DDRC&=~(1<<PC5)
 #define SCL_L {DDRC|=(1<<PC5);PORTC&=~(1<<PC5);}
 #define SCL_H {DDRC&=~(1<<PC5);PORTC|=(1<<PC5);}
-
+ 
 /***************************************************/
 
 
@@ -281,7 +281,7 @@ void LY096BG30_init(void)
 		0xa6,		//set normal/inverse display
 		0x00		//end
 	};
-	uchar *curr = commands;
+	uchar *curr = (uchar*)commands;
 	while (*curr != 0x00) {
 		write_IIC_command(*curr);
 		++curr;
@@ -302,7 +302,7 @@ void display_clear(void)
     }
 }
 
-void generic_display_char(uchar x, uchar y, uchar c, int num, const char** tab)
+void generic_display_char(uchar x, uchar y, uchar c, int num, const uchar** tab, int width)
 {
 	uchar i;
 	write_IIC_command(0xb0+y);
@@ -310,28 +310,28 @@ void generic_display_char(uchar x, uchar y, uchar c, int num, const char** tab)
 	write_IIC_command(0x10+(x>>4));
 	for(i=0;i<8;i++)
 	{
-		write_IIC_data(pgm_read_byte(&tab[c][i<<1]));
+		write_IIC_data(pgm_read_byte(tab + c*width + (i<<1)));
 	}
 	write_IIC_command(0xb1+y);
 	write_IIC_command(x&0x0f);
 	write_IIC_command(0x10+(x>>4));
 	for(i=0;i<8;i++)
 	{
-		write_IIC_data(pgm_read_byte(&tab[c][(i<<1)+1]));
+		write_IIC_data(pgm_read_byte(tab + c*width + (i<<1)+1));
 	}
 }
 
 inline void display_char(uchar x,uchar y,uchar c)//x:0~127 y:0~6 c:0~15
 {
-	generic_display_char(x,y,c,8,tab_16_8);
+	generic_display_char(x, y, c, 8, (const uchar**)tab_16_8, 16);
 }
 inline void display_chinese_char(uchar x,uchar y,uchar c)//x:0~127 y:0~6 c:0~15
 {
-	generic_display_char(x,y,c,16,tab_16_16);
+	generic_display_char(x, y, c, 16, (const uchar**)tab_16_16, 32);
 }
 void display_power(uchar power)
 {
-	generic_display_char(96,0,power,32,tab_power);
+	generic_display_char(96, 0, power, 32, (const uchar**)tab_power, 64);
 }
 void display_picture(void)
 {

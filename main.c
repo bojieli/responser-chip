@@ -623,11 +623,10 @@ int main(void)
 							{
 								if(xpos==10)// ‰ÕÍ¡À—ß∫≈
 								{
-									tx_buf[4]=(stu_num[0]<<4)+stu_num[1];
-									tx_buf[5]=(stu_num[2]<<4)+stu_num[3];
-									tx_buf[6]=(stu_num[4]<<4)+stu_num[5];
-									tx_buf[7]=(stu_num[6]<<4)+stu_num[7];
-									tx_buf[8]=(stu_num[8]<<4)+stu_num[9];
+									for (i=0;i<5;i++)
+									{
+										tx_buf[4+i] = (stu_num[i<<1]<<4) + stu_num[(i<<1)+1];
+									}
 									us=100+(((uint)(TCNT0+((uint)system_time)*178))<<4);
 									for(i=0;i<6;i++)
 									{
